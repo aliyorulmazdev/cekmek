@@ -13,7 +13,7 @@ function chunkArray(arr, size) {
 
 // Anahtarları ve kategorileri almak için işçi oluştur
 async function startWorkers() {
-  const numWorkers = 1; // İşçi sayısı
+  const numWorkers = 15; // İşçi sayısı
 
   // Kategorileri almak için asenkron bir işlev tanımlayın
   async function getAllCategories() {
