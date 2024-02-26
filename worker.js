@@ -25,11 +25,11 @@ async function getNextApiKey() {
 }
 
 // Google Places API'sine istek yapacak fonksiyon
-async function searchPlacesInCity(cityName, category, page) {
+async function searchPlacesInCity(cityName, district, category, page) {
   try {
       const { key, id } = await getNextApiKey(); // Sonraki API anahtarını ve id'sini al
       const requestBody = JSON.stringify({
-          q: `${cityName} ${category}`,
+          q: `${cityName} ${district} ${category}`,
           gl: "tr",
           hl: "tr",
           page: page,
@@ -114,110 +114,91 @@ async function searchAndSavePlaces(cityName, category, done) {
       );
       return;
     }
-    const existingCity = await prisma.city.findUnique({
-      where: {
-        id: city.id,
-      },
-    });
 
-    const existingMarketingCategory = await prisma.marketingCategory.findUnique({
-      where: {
-        id: marketingCategory.id,
-      },
-    });
-
-    if (!existingCity || !existingMarketingCategory) {
-      console.error(`Belirtilen şehir veya pazarlama kategorisi bulunamadı.`);
-      return;
-    }
-
-    // Company tablosunda cityId'si city ile eşleşen ve marketing category'si category ile çakışan kayıtları kontrol et
-    const existingCompanies = await prisma.company.findMany({
+    const districts = await prisma.district.findMany({
       where: {
         cityId: city.id,
-        category: marketingCategory.name,
+      },
+      select: {
+        name: true,
       },
     });
-
-    if (existingCompanies.length > 0) {
-      console.log(`"${cityName}" şehri için "${category}" kategorisi zaten kaydedilmiş.`);
-      return;
-    }
 
     let page = 1;
     let hasNextPage = true;
 
-    while (hasNextPage) {
-      const searchResult = await searchPlacesInCity(cityName, category, page);
+    for (const district of districts) {
+      while (hasNextPage) {
+        const searchResult = await searchPlacesInCity(cityName, district.name, category, page);
 
-      if (searchResult.places.length === 0) {
-        hasNextPage = false;
-        continue;
-      }
-
-      const placesToSave = []; // Kaydedilecek yerleri tutmak için bir dizi oluştur
-
-      const existingCids = new Set(); // Mevcut cid değerlerini tutmak için bir küme oluştur
-
-      for (const place of searchResult.places) {
-        const cityId = city.id; // Şehir ID'sini al
-
-        if (
-          place.cid !== undefined &&
-          place.cid !== null &&
-          place.cid.trim() !== "" &&
-          !existingCids.has(place.cid) // Mevcut cid değeri kümesinde yoksa
-        ) {
-          const data = {
-            position: place.position || 0,
-            title: place.title || "Bilinmeyen Yer",
-            address: place.address || "Bilinmeyen Adres",
-            latitude: place.latitude || 0,
-            longitude: place.longitude || 0,
-            thumbnailUrl: place.thumbnailUrl || "",
-            rating: place.rating || 0,
-            ratingCount: place.ratingCount || 0,
-            category: marketingCategory.name,
-            phoneNumber: place.phoneNumber || "Bilinmeyen Telefon",
-            website: place.website || "",
-            cid: place.cid,
-            cityId: cityId,
-          };
-
-          placesToSave.push(data);
-          existingCids.add(place.cid); // Mevcut cid değeri kümesine ekle
+        if (searchResult.places.length === 0) {
+          hasNextPage = false;
+          continue;
         }
-      }
 
-      if (placesToSave.length > 0) {
-        // Veritabanında aynı `cid` değerine sahip kayıtları kontrol et
-        const existingCompanies = await prisma.company.findMany({
-          where: {
-            cid: { in: placesToSave.map((place) => place.cid) },
-          },
-          select: { cid: true },
-        });
+        const placesToSave = []; // Kaydedilecek yerleri tutmak için bir dizi oluştur
 
-        const existingCidsSet = new Set(
-          existingCompanies.map((company) => company.cid)
-        );
+        const existingCids = new Set(); // Mevcut cid değerlerini tutmak için bir küme oluştur
 
-        // Yalnızca veritabanında olmayan kayıtları ekleyin
-        const companiesToSave = placesToSave.filter(
-          (place) => !existingCidsSet.has(place.cid)
-        );
+        for (const place of searchResult.places) {
+          const cityId = city.id; // Şehir ID'sini al
+          const districtId = district.id;
+          if (
+            place.cid !== undefined &&
+            place.cid !== null &&
+            place.cid.trim() !== "" &&
+            !existingCids.has(place.cid)
+          ) {
+            const data = {
+              position: place.position || 0,
+              title: place.title || "Bilinmeyen Yer",
+              address: place.address || "Bilinmeyen Adres",
+              latitude: place.latitude || 0,
+              longitude: place.longitude || 0,
+              thumbnailUrl: place.thumbnailUrl || "",
+              rating: place.rating || 0,
+              ratingCount: place.ratingCount || 0,
+              category: marketingCategory.name,
+              phoneNumber: place.phoneNumber || "Bilinmeyen Telefon",
+              website: place.website || "",
+              cid: place.cid,
+              cityId: cityId,
+              districtId: districtId
+            };
 
-        if (companiesToSave.length > 0) {
-          await prisma.company.createMany({
-            // Tüm yerleri bir seferde kaydet
-            data: companiesToSave,
+            placesToSave.push(data);
+            existingCids.add(place.cid);
+          }
+        }
+
+        if (placesToSave.length > 0) {
+          // Veritabanında aynı `cid` değerine sahip kayıtları kontrol et
+          const existingCompanies = await prisma.company.findMany({
+            where: {
+              cid: { in: placesToSave.map((place) => place.cid) },
+            },
+            select: { cid: true },
           });
+
+          const existingCidsSet = new Set(
+            existingCompanies.map((company) => company.cid)
+          );
+
+          // Yalnızca veritabanında olmayan kayıtları ekleyin
+          const companiesToSave = placesToSave.filter(
+            (place) => !existingCidsSet.has(place.cid)
+          );
+
+          if (companiesToSave.length > 0) {
+            await prisma.company.createMany({
+              data: companiesToSave,
+            });
+          }
         }
+
+        page++;
       }
-
-      page++;
     }
-
     console.log(
       `"${category}" kategorisindeki yerler ${cityName} için başarıyla kaydedildi.`
     );
@@ -230,7 +211,7 @@ async function searchAndSavePlaces(cityName, category, done) {
 
 // Ana program
 async function main() {
-  const cityName = "Muş"; // Aramak istediğiniz şehrin adını burada belirtin
+  const cityName = "İzmir"; // Aramak istediğiniz şehrin adını burada belirtin
   const categories = workerData.categories;
 
   let count = 0;

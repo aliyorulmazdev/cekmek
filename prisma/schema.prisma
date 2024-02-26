@@ -27,6 +27,7 @@ model District {
   population Int
   cityId   Int
   city     City   @relation(fields: [cityId], references: [id])
+  companies Company[]
 }
 
 model MarketingCategory {
@@ -47,9 +48,11 @@ model Company {
   category     String
   phoneNumber  String
   website      String
+  districtId   Int
   cid          String   @unique
   cityId       Int
   city         City     @relation(fields: [cityId], references: [id])
+  district     District     @relation(fields: [districtId], references: [id])
 }
 
 model ApiKey {
