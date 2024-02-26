@@ -1,0 +1,59 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model City {
+  id        Int       @id @default(autoincrement())
+  name      String
+  districts District[]
+  companies Company[]
+}
+
+model District {
+  id       Int    @id @default(autoincrement())
+  name     String
+  area     Int
+  population Int
+  cityId   Int
+  city     City   @relation(fields: [cityId], references: [id])
+}
+
+model MarketingCategory {
+  id   Int    @id @default(autoincrement())
+  name String
+}
+
+model Company {
+  id           Int       @id @default(autoincrement())
+  position     Int
+  title        String
+  address      String
+  latitude     Float
+  longitude    Float
+  thumbnailUrl String
+  rating       Float
+  ratingCount  Int
+  category     String
+  phoneNumber  String
+  website      String
+  cid          String   @unique
+  cityId       Int
+  city         City     @relation(fields: [cityId], references: [id])
+}
+
+model ApiKey {
+  id        Int     @id @default(autoincrement())
+  key       String
+  remaining Int     @default(2500)
+}
