@@ -157,6 +157,8 @@ async function searchAndSavePlaces(cityName, category, done) {
             place.phoneNumber !== null &&
             place.phoneNumber.trim() !== ""
           ) {
+            const categoryToSave = place.category && place.category.trim() !== '' ? place.category : marketingCategory.name;
+        
             const data = {
               position: place.position || 0,
               title: place.title || "Bilinmeyen Yer",
@@ -166,7 +168,7 @@ async function searchAndSavePlaces(cityName, category, done) {
               thumbnailUrl: place.thumbnailUrl || "",
               rating: place.rating || 0,
               ratingCount: place.ratingCount || 0,
-              category: marketingCategory.name,
+              category: categoryToSave,
               phoneNumber: place.phoneNumber || "Bilinmeyen Telefon",
               website: place.website || "",
               cid: place.cid,
