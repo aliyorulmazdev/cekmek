@@ -27,54 +27,55 @@ async function getNextApiKey() {
 // Google Places API'sine istek yapacak fonksiyon
 async function searchPlacesInCity(cityName, district, category, page) {
   try {
-      const { key, id } = await getNextApiKey(); // Sonraki API anahtarını ve id'sini al
-      const requestBody = JSON.stringify({
-          q: `${cityName} ${district} ${category}`,
-          gl: "tr",
-          hl: "tr",
-          page: page,
-      });
+    const { key, id } = await getNextApiKey(); // Sonraki API anahtarını ve id'sini al
+    const requestBody = JSON.stringify({
+      q: `${cityName} ${district} ${category}`,
+      gl: "tr",
+      hl: "tr",
+      page: page,
+    });
 
-      const requestOptions = {
-          method: "POST",
-          headers: {
-              "X-API-KEY": key,
-              "Content-Type": "application/json",
-          },
-          body: requestBody,
-          redirect: "follow",
-      };
+    const requestOptions = {
+      method: "POST",
+      headers: {
+        "X-API-KEY": key,
+        "Content-Type": "application/json",
+      },
+      body: requestBody,
+      redirect: "follow",
+    };
 
-      const response = await fetch(
-          "https://google.serper.dev/places",
-          requestOptions
+    const response = await fetch(
+      "https://google.serper.dev/places",
+      requestOptions
+    );
+
+    if (response.status === 400) {
+      // HTTP 400 hatası aldığınızda mevcut API anahtarını sil
+      console.error(
+        "HTTP 400 hatası alındı. Mevcut API anahtarı siliniyor."
       );
-
-      if (response.status === 400) {
-        // HTTP 400 hatası aldığınızda mevcut API anahtarını sil
-        console.error("HTTP 400 hatası alındı. Mevcut API anahtarı siliniyor.");
-        await prisma.apiKey.delete({
-            where: { id: id }, // Mevcut API anahtarını sil
-        });
-        return null; // Null döndürerek işlemi sonlandır
+      await prisma.apiKey.delete({
+        where: { id: id }, // Mevcut API anahtarını sil
+      });
+      return null; // Null döndürerek işlemi sonlandır
     }
 
-      const result = await response.json();
+    const result = await response.json();
 
-      // API çağrısı yapıldıktan sonra remaining değerini azalt
-      // API anahtarını güncelle
-      await prisma.apiKey.update({
-          where: { id: id }, // Burada id'yi kullanarak güncelleme yap
-          data: { remaining: { decrement: 1 } }, // Remaining değerini azalt
-      });
+    // API çağrısı yapıldıktan sonra remaining değerini azalt
+    // API anahtarını güncelle
+    await prisma.apiKey.update({
+      where: { id: id }, // Burada id'yi kullanarak güncelleme yap
+      data: { remaining: { decrement: 1 } }, // Remaining değerini azalt
+    });
 
-      return result;
+    return result;
   } catch (error) {
-      console.error("Error in searchPlacesInCity:", error);
-      throw error; // Hatanın üst seviyeye fırlatılması
+    console.error("Error in searchPlacesInCity:", error);
+    throw error; // Hatanın üst seviyeye fırlatılması
   }
 }
-
 
 // Verilen kategori adıyla ilgili MarketingCategory'yi veritabanından bulacak fonksiyon
 async function getMarketingCategoryByName(categoryName) {
@@ -96,6 +97,7 @@ async function getCityByName(cityName) {
   return city;
 }
 
+// Yerleri arayacak ve kaydedecek fonksiyon
 // Yerleri arayacak ve kaydedecek fonksiyon
 async function searchAndSavePlaces(cityName, category, done) {
   try {
@@ -120,6 +122,7 @@ async function searchAndSavePlaces(cityName, category, done) {
         cityId: city.id,
       },
       select: {
+        id: true,
         name: true,
       },
     });
@@ -128,21 +131,22 @@ async function searchAndSavePlaces(cityName, category, done) {
     let hasNextPage = true;
 
     for (const district of districts) {
+      const currentDistrict = district; // Mevcut ilçeyi temsil eden değişkeni tanımla
       while (hasNextPage) {
-        const searchResult = await searchPlacesInCity(cityName, district.name, category, page);
-
+        const searchResult = await searchPlacesInCity(cityName, currentDistrict.name, category, page);
+      
         if (searchResult.places.length === 0) {
           hasNextPage = false;
           continue;
         }
-
+      
         const placesToSave = []; // Kaydedilecek yerleri tutmak için bir dizi oluştur
-
+      
         const existingCids = new Set(); // Mevcut cid değerlerini tutmak için bir küme oluştur
-
+        console.log("Current district:", currentDistrict);
+    
         for (const place of searchResult.places) {
           const cityId = city.id; // Şehir ID'sini al
-          const districtId = district.id;
           if (
             place.cid !== undefined &&
             place.cid !== null &&
@@ -163,14 +167,14 @@ async function searchAndSavePlaces(cityName, category, done) {
               website: place.website || "",
               cid: place.cid,
               cityId: cityId,
-              districtId: districtId
+              districtId: currentDistrict.id
             };
-
+        
             placesToSave.push(data);
             existingCids.add(place.cid);
           }
         }
-
+    
         if (placesToSave.length > 0) {
           // Veritabanında aynı `cid` değerine sahip kayıtları kontrol et
           const existingCompanies = await prisma.company.findMany({
@@ -179,35 +183,34 @@ async function searchAndSavePlaces(cityName, category, done) {
             },
             select: { cid: true },
           });
-
+    
           const existingCidsSet = new Set(
             existingCompanies.map((company) => company.cid)
           );
-
+    
           // Yalnızca veritabanında olmayan kayıtları ekleyin
           const companiesToSave = placesToSave.filter(
             (place) => !existingCidsSet.has(place.cid)
           );
-
+    
           if (companiesToSave.length > 0) {
             await prisma.company.createMany({
               data: companiesToSave,
             });
           }
         }
-
+    
         page++;
       }
     }
-    console.log(
-      `"${category}" kategorisindeki yerler ${cityName} için başarıyla kaydedildi.`
-    );
+
   } catch (error) {
     console.error("Error:", error);
   } finally {
     done(); // İşlem tamamlandığında done fonksiyonunu çağır
   }
 }
+
 
 // Ana program
 async function main() {
