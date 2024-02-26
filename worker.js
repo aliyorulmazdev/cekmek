@@ -151,7 +151,11 @@ async function searchAndSavePlaces(cityName, category, done) {
             place.cid !== undefined &&
             place.cid !== null &&
             place.cid.trim() !== "" &&
-            !existingCids.has(place.cid)
+            !existingCids.has(place.cid) &&
+            place.address.toLowerCase().includes(currentDistrict.name.toLowerCase()) &&
+            place.phoneNumber !== undefined &&
+            place.phoneNumber !== null &&
+            place.phoneNumber.trim() !== ""
           ) {
             const data = {
               position: place.position || 0,
